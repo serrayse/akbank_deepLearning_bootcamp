@@ -1,0 +1,114 @@
+#AYSE SERRA SİMSEK
+
+import os
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix, classification_report
+import seaborn as sns
+import matplotlib.pyplot as plt
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras import layers, models
+import numpy as np
+
+# 1. Balık veri kümesini Pandas DataFrame'e yükleme
+fish_dir = '/kaggle/input/a-large-scale-fish-dataset/Fish_Dataset/Fish_Dataset'
+label = []
+path = []
+
+for dir_name, _, filenames in os.walk(fish_dir):
+    for filename in filenames:
+        if os.path.splitext(filename)[-1] == '.png':
+            if dir_name.split()[-1] != 'GT':
+                label.append(os.path.split(dir_name)[-1])
+                path.append(os.path.join(dir_name, filename))
+
+# Pandas DataFrame oluşturma
+data = pd.DataFrame({
+    'path': path,
+    'label': label
+})
+
+# 2. Veriyi train ve test setlerine ayırma
+train_data, test_data = train_test_split(data, test_size=0.2, stratify=data['label'], random_state=42)
+
+print("Train set size:", len(train_data))
+print("Test set size:", len(test_data))
+
+# 3. Görsellerin işlenmesi ve batch'ler halinde yüklenmesi
+train_datagen = ImageDataGenerator(rescale=1./255)
+test_datagen = ImageDataGenerator(rescale=1./255)
+
+train_generator = train_datagen.flow_from_dataframe(
+    dataframe=train_data,
+    x_col="path",
+    y_col="label",
+    target_size=(150, 150),
+    batch_size=32,
+    class_mode="categorical",
+    shuffle=True
+)
+
+test_generator = test_datagen.flow_from_dataframe(
+    dataframe=test_data,
+    x_col="path",
+    y_col="label",
+    target_size=(150, 150),
+    batch_size=32,
+    class_mode="categorical",
+    shuffle=False
+)
+
+# 4. CNN modelini tanımlama
+model = models.Sequential()
+
+# Conv2D katmanlarını ekleyelim
+model.add(layers.Conv2D(32, (3, 3), activation='relu', input_shape=(150, 150, 3)))
+model.add(layers.MaxPooling2D((2, 2)))
+model.add(layers.Conv2D(64, (3, 3), activation='relu'))
+model.add(layers.MaxPooling2D((2, 2)))
+model.add(layers.Conv2D(128, (3, 3), activation='relu'))
+model.add(layers.MaxPooling2D((2, 2)))
+
+# Özellik haritalarını düzleştirme
+model.add(layers.Flatten())
+
+# Dense katmanları ekleyelim
+model.add(layers.Dense(512, activation='relu'))
+model.add(layers.Dropout(0.5))  # Overfitting'i azaltmak için dropout
+model.add(layers.Dense(128, activation='relu'))
+model.add(layers.Dense(9, activation='softmax'))  # 9 sınıf olduğu için output 9
+
+# Modeli derleme
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+# Modeli eğitme
+history = model.fit(
+    train_generator,
+    epochs=20,
+    validation_data=test_generator
+)
+
+# 5. Confusion Matrix için test seti üzerindeki tahminleri alıyoruz
+test_steps = test_generator.samples // test_generator.batch_size
+predictions = model.predict(test_generator, steps=test_steps + 1)
+
+# Tahmin edilen sınıfları buluyoruz
+predicted_classes = np.argmax(predictions, axis=1)
+
+# Gerçek sınıfları alıyoruz
+true_classes = test_generator.classes
+
+# Class label isimlerini alıyoruz
+class_labels = list(test_generator.class_indices.keys())
+
+# 6. Confusion Matrix çizimi
+conf_matrix = confusion_matrix(true_classes, predicted_classes)
+plt.figure(figsize=(10, 8))
+sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', xticklabels=class_labels, yticklabels=class_labels)
+plt.title('Confusion Matrix')
+plt.xlabel('Predicted Class')
+plt.ylabel('True Class')
+plt.show()
+
+# 7. Classification Report (Precision, Recall, F1-Score)
+print(classification_report(true_classes, predicted_classes, target_names=class_labels))
