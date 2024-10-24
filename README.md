@@ -1,7 +1,7 @@
 # akbank_deepLearning_bootcamp
  ANN Architect
 
-!!! KAGGLE LINK: https://www.kaggle.com/code/serrayse/notebookdac723680e/edit
+!!! KAGGLE LINK: https://www.kaggle.com/code/serrayse/notebookdac723680e
 
 
 # Fish Classification with Artificial Neural Network (ANN)
